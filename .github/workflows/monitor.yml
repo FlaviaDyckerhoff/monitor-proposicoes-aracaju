@@ -3,7 +3,6 @@ name: Monitor Proposicoes Aracaju
 on:
   schedule:
     - cron: '18 12 * * 1-5'
-    - cron: '18 20 * * 1-5'
   workflow_dispatch:
 
 jobs:
