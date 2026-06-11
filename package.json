@@ -1,0 +1,12 @@
+{
+  "name": "monitor-proposicoes-aracaju",
+  "version": "1.0.0",
+  "description": "Monitor automatico de proposicoes da Camara Municipal de Aracaju",
+  "main": "monitor.js",
+  "scripts": {
+    "start": "node monitor.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.9"
+  }
+}
