@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 
 const CASA = 'Camara Municipal de Aracaju';
 const BASE = 'http://190.15.122.10:8080/sapl';
@@ -46,13 +47,48 @@ function brToIso(data) {
 }
 
 async function fetchLatin1(url) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 Chrome/124', Accept: 'text/html' },
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status + ' em ' + url);
-  const buf = await res.arrayBuffer();
-  return new TextDecoder('iso-8859-1').decode(buf);
+  const headers = { 'User-Agent': 'Mozilla/5.0 Chrome/124', Accept: 'text/html' };
+  let ultimoErro;
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      const res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(90000),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' em ' + url);
+      const buf = await res.arrayBuffer();
+      return new TextDecoder('iso-8859-1').decode(buf);
+    } catch (err) {
+      ultimoErro = err;
+      console.log('Tentativa fetch ' + tentativa + ' falhou: ' + err.message);
+      try {
+        return fetchLatin1ComCurl(url, headers);
+      } catch (curlErr) {
+        ultimoErro = curlErr;
+        console.log('Fallback curl falhou: ' + curlErr.message);
+      }
+      await sleep(5000 * tentativa);
+    }
+  }
+  throw ultimoErro;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function fetchLatin1ComCurl(url, headers) {
+  const args = ['-L', '-sS', '--fail', '--max-time', '90'];
+  for (const [nome, valor] of Object.entries(headers)) {
+    args.push('-H', nome + ': ' + valor);
+  }
+  args.push(url);
+  const res = spawnSync('curl', args, { maxBuffer: 20 * 1024 * 1024 });
+  if (res.error) throw res.error;
+  if (res.status !== 0) {
+    throw new Error('curl exit ' + res.status + ': ' + String(res.stderr || '').trim());
+  }
+  return new TextDecoder('iso-8859-1').decode(res.stdout);
 }
 
 function pesquisarUrl(dataInicial, dataFinal) {
