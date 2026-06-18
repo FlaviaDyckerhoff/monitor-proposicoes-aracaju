@@ -183,6 +183,48 @@ async function buscarProposicoes(dataCorte) {
   return proposicoes.filter(p => !p.dataIso || p.dataIso >= dataCorte);
 }
 
+function mlEscapeHtmlClienteDestaque(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function mlEscapeRegExpClienteDestaque(valor) {
+  return String(valor).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+}
+
+function mlDestacarTermosClienteEmail(texto, clientes) {
+  const nomes = Array.from(new Set([...(clientes || []), ...CLIENTES_NOMES_PROPRIOS]))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (!nomes.length) return mlEscapeHtmlClienteDestaque(texto);
+
+  const regex = new RegExp('(^|[^A-Za-zÀ-ÿ0-9])(' + nomes.map(mlEscapeRegExpClienteDestaque).join('|') + ')(?=[^A-Za-zÀ-ÿ0-9]|$)', 'gi');
+  return mlEscapeHtmlClienteDestaque(texto).replace(regex, (match, prefixo, termo) => {
+    return prefixo + '<span style="background:#dbeafe;color:#1e3a8a;font-weight:700;border-radius:3px;padding:1px 3px">' + termo + '</span>';
+  });
+}
+
+function renderizarEmentaCliente(p, renderBase) {
+  const texto = String((p && p.ementa) || '-');
+  const partes = texto.split(/\s+\|\s+Cliente citado:\s+/i);
+  const ementa = renderBase
+    ? renderBase(partes[0])
+    : mlDestacarTermosClienteEmail(partes[0], p && p.clientesCitados);
+  const clientes = partes.length > 1
+    ? partes.slice(1).join(' | Cliente citado: ')
+    : ((p && p.clientesCitados) || []).join(', ');
+
+  if (!clientes) return ementa;
+  return ementa + '<div style="margin-top:6px">' +
+    '<span style="display:inline-block;background:#eef6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700">' +
+    'Cliente citado: ' + mlDestacarTermosClienteEmail(clientes, p && p.clientesCitados) +
+    '</span></div>';
+}
+
 async function enviarEmail(novas) {
   anotarClientesCitados(novas);
   if (process.env.DRY_RUN_EMAIL === 'true') {
@@ -195,7 +237,7 @@ async function enviarEmail(novas) {
     service: 'gmail',
     auth: { user: process.env.EMAIL_REMETENTE, pass: process.env.EMAIL_SENHA },
   });
-  const rows = novas.map(p => '<tr><td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap"><a href="' + escapeHtml(p.link) + '"><b>' + escapeHtml(p.tipo + ' ' + p.numero + '/' + p.ano) + '</b></a><br><span style="color:#777;font-size:12px">' + escapeHtml(p.data || '-') + '</span></td><td style="padding:8px;border-bottom:1px solid #eee">' + escapeHtml(p.ementa) + '<br><span style="color:#777;font-size:12px">' + escapeHtml(p.situacao || '') + '</span></td></tr>').join('');
+  const rows = novas.map(p => '<tr><td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap"><a href="' + escapeHtml(p.link) + '"><b>' + escapeHtml(p.tipo + ' ' + p.numero + '/' + p.ano) + '</b></a><br><span style="color:#777;font-size:12px">' + escapeHtml(p.data || '-') + '</span></td><td style="padding:8px;border-bottom:1px solid #eee">' + renderizarEmentaCliente(p) + '<br><span style="color:#777;font-size:12px">' + escapeHtml(p.situacao || '') + '</span></td></tr>').join('');
   const html = '<div style="font-family:Arial,sans-serif;max-width:900px"><h2>Camara Municipal de Aracaju — ' + novas.length + ' nova(s) proposicao(oes)</h2><table style="width:100%;border-collapse:collapse">' + rows + '</table><p><a href="' + pesquisarUrl('01/01/' + ANO, hojeBr()) + '">Fonte oficial</a></p></div>';
   await transporter.sendMail({
     from: '"Monitor Aracaju" <' + process.env.EMAIL_REMETENTE + '>',
