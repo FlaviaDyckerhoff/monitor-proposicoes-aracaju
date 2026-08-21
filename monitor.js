@@ -1,6 +1,26 @@
+const FICHA_URL = process.env.FICHA_URL || 'https://doe.monitorlegislativo.com.br/ficha';
+
+function fichaEmailButtonHtml() {
+  return '<div style="background:#eef6ff;border:1px solid #c7ddf2;border-radius:6px;padding:11px 13px;margin:12px 0;color:#173d63;font-size:13px;line-height:1.45">' +
+    '<strong>Ficha</strong><br>' +
+    '<span>Cole o link oficial de uma proposição para criar ficha e acelerar a revisão/cadastro.</span><br>' +
+    '<a href="' + FICHA_URL + '" style="display:inline-block;background:#0f3d5c;color:white;text-decoration:none;border-radius:4px;padding:8px 11px;font-weight:bold;margin-top:8px">Criar ficha</a>' +
+    '</div>';
+}
+
 const CONTROLE03_FORCE_LATEST = String(process.env.CONTROLE03_FORCE_LATEST || '').trim() === '1';
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+let promoverInteresseClienteProposicao = (_item, atuais) => Array.isArray(atuais) ? atuais : [];
+try {
+  try {
+    ({ promoverInteresseClienteProposicao } = require('./client_interest_matcher_js'));
+  } catch (_localErr) {
+    ({ promoverInteresseClienteProposicao } = require('../../agents/pautas/client_interest_matcher_js'));
+  }
+} catch (err) {
+  console.warn('⚠️ Matcher cliente/palavra comum indisponível; usando destaque legado: ' + err.message);
+}
 const RADAR03_URL = process.env.RADAR03_URL || 'https://doe.monitorlegislativo.com.br/controle03/';
 const CASA_RADAR03 = process.env.CASA_RADAR03 || 'SE - Aracaju';
 const CONTROLE03_STATE_URL = process.env.CONTROLE03_STATE_URL || new URL('api/state', RADAR03_URL).toString();
@@ -8,6 +28,13 @@ const CONTROLE03_API_USER = process.env.CONTROLE03_API_USER || '';
 const CONTROLE03_API_PASS = process.env.CONTROLE03_API_PASS || '';
 const CONTROLE03_BASIC_AUTH = process.env.CONTROLE03_BASIC_AUTH || '';
 
+function mlClientInterestContext() {
+  return {
+    uf: process.env.CLIENT_INTEREST_UF || process.env.UF || 'SE',
+    municipio: process.env.CLIENT_INTEREST_MUNICIPIO || process.env.MUNICIPIO || 'Aracaju',
+    casa: CASA_RADAR03,
+  };
+}
 
 const CASA = 'Camara Municipal de Aracaju';
 const BASE = 'http://190.15.122.10:8080/sapl';
@@ -209,7 +236,7 @@ const CLIENTES_NOMES_PROPRIOS = [
   'Wild Fork', 'Ajinomoto', 'Vibra', 'Vibra Energia',
   'BR Distribuidora', 'Raízen', 'Raizen', 'Mindlab',
   'ABVTEX', 'Semove', 'Barcas', 'Seta',
-  'Nova Infra', 'BRT'
+  'Nova Infra'
 ];
 
 const CLIENTES_INATIVOS_NAO_DESTACAR = [
@@ -234,7 +261,9 @@ function anotarClientesCitados(proposicoes) {
       const re = new RegExp('(^|[^A-Za-zÀ-ÿ0-9])' + escaped + '([^A-Za-zÀ-ÿ0-9]|$)', 'i');
       if (re.test(texto)) achados.push(nome);
     }
-    if (achados.length) p.ementa += ' | Cliente citado: ' + Array.from(new Set(achados)).join(', ');
+    const clientes = promoverInteresseClienteProposicao(p, Array.from(new Set(achados)), mlClientInterestContext());
+    p.clientesCitados = clientes;
+    if (clientes.length) p.ementa += ' | Cliente citado: ' + clientes.join(', ');
   }
 }
 
@@ -594,7 +623,7 @@ async function enviarEmail(novas) {
     from: '"Monitor Aracaju" <' + process.env.EMAIL_REMETENTE + '>',
     to: process.env.EMAIL_DESTINO,
     subject: assuntoEmailClienteCitado(novas, '🏛️ Aracaju: ' + novas.length + ' nova(s) proposição(ões) — ' + new Date().toLocaleDateString('pt-BR')),
-    html,
+    html: fichaEmailButtonHtml() + html,
   });
   console.log('Email enviado com ' + novas.length + ' proposicoes novas.');
 }
