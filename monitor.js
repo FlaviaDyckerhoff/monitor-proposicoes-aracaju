@@ -1,3 +1,4 @@
+const lacunas03 = require('./lacunas03');
 const mlPropsPriority = require('./priority_terms');
 
 const FICHA_URL = process.env.FICHA_URL || 'https://doe.monitorlegislativo.com.br/ficha';
@@ -504,6 +505,7 @@ async function sincronizarRadar03(novas) {
         const base = Number.parseInt(String(item.base || baseAtual || 0), 10) || 0;
         item.tipo = det.tipo;
         item.mon = det.numeroInt;
+        item.ano = String(det.ano || item.ano || '');
         item.delta = det.numeroInt === base ? 0 : 1;
         item.sentido = det.numeroInt === base ? 'bate com o controle' : 'captado individualmente na fonte';
         item.fluxo = item.delta ? 'nao_consultado' : (item.fluxo || 'revisado');
@@ -596,7 +598,7 @@ async function enviarEmail(novas) {
   });
   const rows = novas.map(p => '<tr><td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap"><a href="' + escapeHtml(p.link) + '"><b>' + escapeHtml(p.tipo + ' ' + p.numero + '/' + p.ano) + '</b></a><br><span style="color:#777;font-size:12px">' + escapeHtml(p.data || '-') + '</span></td><td style="padding:8px;border-bottom:1px solid #eee">' + renderizarEmentaCliente(p) + '<br><span style="color:#777;font-size:12px">' + escapeHtml(p.situacao || '') + '</span></td></tr>').join('');
   const html = renderRadar03EmailButton(novas) + '<div style="font-family:Arial,sans-serif;max-width:900px"><h2>Camara Municipal de Aracaju — ' + novas.length + ' nova(s) proposicao(oes)</h2><table style="width:100%;border-collapse:collapse">' + rows + '</table><p><a href="' + pesquisarUrl('01/01/' + ANO, hojeBr()) + '">Fonte oficial</a></p></div>';
-  await transporter.sendMail({
+  await lacunas03.sendMail.bind(null, transporter, {casa: CASA_RADAR03, stateUrl: CONTROLE03_STATE_URL, headers: radar03AuthHeaders})({
     from: '"Monitor Aracaju" <' + process.env.EMAIL_REMETENTE + '>',
     to: process.env.EMAIL_DESTINO,
     subject: assuntoEmailClienteCitado(novas, '🏛️ Aracaju: ' + novas.length + ' nova(s) proposição(ões) — ' + new Date().toLocaleDateString('pt-BR')),
